@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全国市区町村・天下統一クロニクル</title>
+<style>
+  :root {
+    --bg-dark: #0f172a;
+    --panel-bg: #1e293b;
+    --panel-border: #334155;
+    --accent: #f59e0b;
+    --accent-hover: #d97706;
+    --player-color: #3b82f6;
+    --ally-color: #10b981;
+    --enemy-color: #ef4444;
+    --text-main: #f8fafc;
+    --text-sub: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-main);
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* タイトル＆初期選択画面 */
+  #start-screen {
+    position: fixed; inset: 0;
+    background: radial-gradient(circle at center, #1e293b 0%, #090d16 100%);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .title-box {
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .title-box h1 {
+    font-size: 2.2rem;
+    color: var(--accent);
+    text-shadow: 0 2px 10px rgba(245, 158, 11, 0.4);
+    letter-spacing: 2px;
+  }
+  .title-box p { color: var(--text-sub); font-size: 0.95rem; margin-top: 4px; }
+
+  .setup-container {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 900px;
+    height: 75vh;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  }
+  .setup-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  input, select, button {
+    background: #0f172a;
+    color: var(--text-main);
+    border: 1px solid var(--panel-border);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+  }
+  button {
+    cursor: pointer;
+    background: #334155;
+    transition: 0.15s;
+    font-weight: bold;
+  }
+  button:hover:not(:disabled) { background: #475569; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #000; border: none; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn-api { background: #0284c7; border: none; }
+  .btn-api:hover:not(:disabled) { background: #0369a1; }
+
+  .city-grid {
+    flex: 1;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+    padding: 8px;
+    background: #0f172a;
+    border-radius: 8px;
+    border: 1px solid var(--panel-border);
+  }
+  .city-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 10px;
+    cursor: pointer;
+    transition: 0.15s;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .city-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .city-card.selected {
+    background: rgba(245, 158, 11, 0.2);
+    border: 2px solid var(--accent);
+  }
+  .city-card .pref-tag { font-size: 0.72rem; color: var(--text-sub); }
+  .city-card .city-name { font-size: 1rem; font-weight: bold; margin: 2px 0; }
+  .city-card .city-power { font-size: 0.75rem; color: #38bdf8; }
+
+  /* メインゲーム画面 */
+  #topbar {
+    height: 54px;
+    background: var(--panel-bg);
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    z-index: 10;
+  }
+  .status-group { display: flex; gap: 18px; align-items: center; font-size: 0.92rem; }
+  .stat-item { display: flex; align-items: center; gap: 5px; }
+  .stat-val { font-weight: bold; color: var(--accent); font-size: 1.05rem; }
+
+  #main-area {
+    flex: 1;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* マップCanvas */
+  #map-container {
+    flex: 1;
+    position: relative;
+    background: #070b14;
+    overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+
+  .map-overlay-controls {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .legend-box {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid var(--panel-border);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    display: flex;
+    gap: 12px;
+  }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+
+  /* 右サイドバー（操作パネル） */
+  #sidebar {
+    width: 360px;
+    background: var(--panel-bg);
+    border-left: 1px solid var(--panel-border);
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+  }
+  .panel-section {
+    padding: 14px;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .panel-title {
+    font-size: 0.85rem;
+    color: var(--text-sub);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .city-header {
+    font-size: 1.3rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .owner-badge {
+    font-size: 0.8rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: #334155;
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+    background: #0f172a;
+    padding: 10px;
+    border-radius: 8px;
+  }
+  .stats-grid div { font-size: 0.85rem; }
+  .stats-grid span { float: right; font-weight: bold; color: #38bdf8; }
+
+  .action-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .tab-btn {
+    flex: 1;
+    border: none;
+    border-radius: 0;
+    background: #0f172a;
+    padding: 10px;
+    font-size: 0.85rem;
+    color: var(--text-sub);
+  }
+  .tab-btn.active {
+    background: var(--panel-bg);
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
+  }
+
+  .actions-list {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    overflow-y: auto;
+  }
+  .cmd-btn {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    text-align: left;
+  }
+  .cmd-btn:hover:not(:disabled) { border-color: var(--accent); background: #162032; }
+  .cmd-info { display: flex; flex-direction: column; }
+  .cmd-name { font-size: 0.92rem; font-weight: bold; }
+  .cmd-desc { font-size: 0.75rem; color: var(--text-sub); }
+  .cmd-cost { font-size: 0.8rem; color: var(--accent); white-space: nowrap; }
+
+  /* ログエリア */
+  #log-box {
+    height: 150px;
+    background: #090d16;
+    border-top: 1px solid var(--panel-border);
+    padding: 10px 14px;
+    overflow-y: auto;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .log-entry { margin-bottom: 4px; border-bottom: 1px dashed #1e293b; padding-bottom: 2px; }
+  .log-war { color: #f87171; }
+  .log-ally { color: #34d399; }
+  .log-event { color: #fbbf24; }
+
+  /* 合戦・外交モーダル */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+  .modal {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 520px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+  }
+  .modal h3 { color: var(--accent); margin-bottom: 12px; font-size: 1.25rem; }
+  .battle-vs {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0f172a;
+    padding: 14px;
+    border-radius: 8px;
+    margin: 12px 0;
+  }
+  .tactics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .tactic-btn {
+    padding: 10px 6px;
+    text-align: center;
+    background: #0f172a;
+    border: 1px solid #475569;
+  }
+  .tactic-btn:hover { border-color: var(--accent); background: #1e293b; }
+</style>
+</head>
+<body>
+
+<!-- スタート画面（始まりの市選択） -->
+<div id="start-screen">
+  <div class="title-box">
+    <h1>全国市区町村・天下統一クロニクル</h1>
+    <p>始まりの市区町村を選び、内政・同盟・合戦を駆使して日本全国を統一せよ！</p>
+  </div>
+  <div class="setup-container">
+    <div class="setup-controls">
+      <select id="pref-filter">
+        <option value="ALL">全都道府県（すべて表示）</option>
+      </select>
+      <input type="text" id="city-search" placeholder="市区町村名で検索 (例: 岡崎, 新宿, 札幌)..." style="flex:1;">
+      <button class="btn-api" id="btn-load-pref-api" title="選択中の都道府県の全市区町村をAPIから取得">選択県の全市町村を取得</button>
+      <button class="btn-api" id="btn-load-all-api" title="日本全国の全1,741市区町村をAPIから一括取得">全国1,741市区町村フル読込</button>
+    </div>
+    <div class="setup-controls" style="justify-content: space-between; align-items: center;">
+      <div style="font-size: 0.85rem; color: var(--text-sub);">
+        現在のマップ都市数: <strong id="city-count-label" style="color:#fff;">0</strong> 自治体
+        <span id="api-status" style="margin-left:10px; color:#38bdf8;"></span>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="custom-city-name" placeholder="任意の市町村を追加..." style="width:160px;">
+        <button id="btn-add-custom">＋追加</button>
+      </div>
+    </div>
+
+    <div class="city-grid" id="city-grid"></div>
+
+    <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        始まりの地: <strong id="selected-start-label" style="color:var(--accent); font-size:1.1rem;">未選択</strong>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button id="btn-random-city">🎲 ランダム選択</button>
+        <button class="btn-primary" id="btn-start-game" disabled style="padding: 10px 28px; font-size: 1.05rem;">この市で天下統一を始める！</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- トップバー -->
+<div id="topbar">
+  <div class="status-group">
+    <div class="stat-item"><span id="date-label" style="font-weight:bold;">1年目 春</span></div>
+    <div class="stat-item">君主: <strong id="player-clan-name" style="color:#60a5fa;">---</strong></div>
+    <div class="stat-item">💰 金: <span class="stat-val" id="gold-val">0</span></div>
+    <div class="stat-item">🌾 兵糧: <span class="stat-val" id="food-val">0</span></div>
+    <div class="stat-item">⚙️ 技術Lv: <span class="stat-val" id="tech-val">1</span></div>
+    <div class="stat-item">🏯 支配都市: <span class="stat-val" id="territory-val">1 / 300</span></div>
+  </div>
+  <div style="display:flex; gap:8px;">
+    <button id="btn-auto-domestic" title="全自軍都市を自動で内政開発します">⚡ 一括内政</button>
+    <button id="btn-gather-troops" title="後方の都市から選択中の前線都市へ兵力を集めます">🚩 前線へ兵力招集</button>
+    <button class="btn-primary" id="btn-end-turn">ターン終了 ▶</button>
+  </div>
+</div>
+
+<!-- メインエリア -->
+<div id="main-area">
+  <div id="map-container">
+    <canvas id="map-canvas"></canvas>
+    <div class="map-overlay-controls">
+      <button id="btn-zoom-in">＋ 拡大</button>
+      <button id="btn-zoom-out">－ 縮小</button>
+      <button id="btn-center-player">📍 本拠地へ移動</button>
+    </div>
+    <div class="legend-box">
+      <div><span class="dot" style="background:#3b82f6;"></span>自軍領土</div>
+      <div><span class="dot" style="background:#10b981;"></span>同盟勢力</div>
+      <div><span class="dot" style="background:#ef4444;"></span>他勢力（敵）</div>
+      <div><span class="dot" style="background:#fbbf24;"></span>選択中 / 攻撃対象</div>
+    </div>
+  </div>
+
+  <!-- 右サイドバー -->
+  <div id="sidebar">
+    <div class="panel-section">
+      <div class="panel-title">
+        <span id="detail-pref">---</span>
+        <span id="detail-relation" style="color:#fbbf24;">---</span>
+      </div>
+      <div class="city-header">
+        <span id="detail-name">都市を選択してください</span>
+        <span class="owner-badge" id="detail-owner">---</span>
+      </div>
+      <div class="stats-grid">
+        <div>⚔️ 兵力 <span id="detail-troops">0</span></div>
+        <div>🏯 城防御 <span id="detail-def">0</span></div>
+        <div>💰 商業値 <span id="detail-eco">0</span></div>
+        <div>🌾 農業値 <span id="detail-agri">0</span></div>
+      </div>
+    </div>
+
+    <div class="action-tabs">
+      <button class="tab-btn active" data-tab="domestic">内政・軍備</button>
+      <button class="tab-btn" data-tab="war">合戦・侵攻</button>
+      <button class="tab-btn" data-tab="diplomacy">外交・調略</button>
+    </div>
+
+    <div class="actions-list" id="actions-container"></div>
+
+    <div id="log-box"></div>
+  </div>
+</div>
+
+<!-- 合戦モーダル -->
+<div class="modal-backdrop" id="battle-modal">
+  <div class="modal">
+    <h3>⚔️ 合戦開始！戦術を選択せよ</h3>
+    <p id="battle-route-text" style="font-size:0.9rem; color:var(--text-sub);"></p>
+    <div class="battle-vs">
+      <div>
+        <div style="color:#60a5fa; font-weight:bold;" id="atk-name">自軍</div>
+        <div style="font-size:1.2rem; font-weight:bold;" id="atk-troops">1,000</div>
+        <div style="font-size:0.75rem; color:#34d399;" id="atk-ally-bonus"></div>
+      </div>
+      <div style="font-size:1.4rem; font-weight:bold; color:var(--accent);">VS</div>
+      <div style="text-align:right;">
+        <div style="color:#f87171; font-weight:bold;" id="def-name">敵軍</div>
+        <div style="font-size:1.2rem; font-weight:bold;" id="def-troops">1,000</div>
+        <div style="font-size:0.75rem; color:var(--text-sub);" id="def-castle-bonus"></div>
+      </div>
+    </div>
+    <div style="font-size:0.85rem; margin-bottom:6px;">出陣させる兵力割合: <strong id="send-ratio-label">80%</strong></div>
+    <input type="range" id="send-ratio" min="20" max="95" value="80" style="width:100%; margin-bottom:10px;">
+    <div class="tactics-grid">
+      <button class="tactic-btn" onclick="executeBattle('charge')">
+        <div style="font-weight:bold; color:#f87171;">🔥 正面突破</div>
+        <div style="font-size:0.72rem; color:var(--text-sub); margin-top:4px;">短期決戦。大兵力時に有利</div>
+      </button>
+      <button class="tactic-btn" onclick="executeBattle('siege')">
+        <div style="font-weight:bold; color:#60a5fa;">🛡️ 包囲殲滅</div>
+        <div style="font-size:0.72rem; color:var(--text-sub); margin-top:4px;">堅実な戦術。被害を抑える</div>
+      </button>
+      <button class="tactic-btn" onclick="executeBattle('ambush')">
+        <div style="font-weight:bold; color:#fbbf24;">⚡ 奇襲夜襲</div>
+        <div style="font-size:0.72rem; color:var(--text-sub); margin-top:4px;">城防御を無視！一発逆転も</div>
+      </button>
+    </div>
+    <div style="text-align:right; margin-top:10px;">
+      <button onclick="closeBattleModal()">撤退（キャンセル）</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// 1. 全国47都道府県の基準座標と初期内蔵の全市データ（約330主要市区町村）
+// ============================================================================
+const PREF_DATA = [
+  { p: "北海道", lat: 43.06, lng: 141.35, c: ["札幌市","函館市","小樽市","旭川市","室蘭市","釧路市","帯広市","北見市","夕張市","岩見沢市","網走市","留萌市","苫小牧市","稚内市","江別市","千歳市","富良野市","登別市","恵庭市","北広島市","石狩市","北斗市"] },
+  { p: "青森県", lat: 40.82, lng: 140.74, c: ["青森市","弘前市","八戸市","黒石市","五所川原市","十和田市","三沢市","むつ市"] },
+  { p: "岩手県", lat: 39.70, lng: 141.15, c: ["盛岡市","宮古市","大船渡市","花巻市","北上市","久慈市","遠野市","一関市","陸前高田市","釜石市","奥州市"] },
+  { p: "宮城県", lat: 38.26, lng: 140.87, c: ["仙台市","石巻市","塩竈市","気仙沼市","白石市","名取市","角田市","多賀城市","岩沼市","登米市","栗原市","大崎市"] },
+  { p: "秋田県", lat: 39.71, lng: 140.10, c: ["秋田市","能代市","横手市","大館市","男鹿市","湯沢市","由利本荘市","大仙市","仙北市"] },
+  { p: "山形県", lat: 38.24, lng: 140.36, c: ["山形市","米沢市","鶴岡市","酒田市","新庄市","寒河江市","上山市","村山市","天童市","東根市"] },
+  { p: "福島県", lat: 37.75, lng: 140.46, c: ["福島市","会津若松市","郡山市","いわき市","白河市","須賀川市","喜多方市","相馬市","二本松市","伊達市","南相馬市"] },
+  { p: "茨城県", lat: 36.34, lng: 140.44, c: ["水戸市","日立市","土浦市","古河市","石岡市","結城市","龍ケ崎市","下妻市","常総市","ひたちなか市","鹿嶋市","取手市","つくば市","守谷市","神栖市"] },
+  { p: "栃木県", lat: 36.56, lng: 139.88, c: ["宇都宮市","足利市","栃木市","佐野市","鹿沼市","日光市","小山市","真岡市","大田原市","矢板市","那須塩原市"] },
+  { p: "群馬県", lat: 36.39, lng: 139.06, c: ["前橋市","高崎市","桐生市","伊勢崎市","太田市","沼田市","館林市","渋川市","藤岡市","富岡市","安中市"] },
+  { p: "埼玉県", lat: 35.85, lng: 139.64, c: ["さいたま市","川越市","熊谷市","川口市","行田市","秩父市","所沢市","飯能市","本庄市","東松山市","春日部市","狭山市","深谷市","上尾市","草加市","越谷市","久喜市"] },
+  { p: "千葉県", lat: 35.60, lng: 140.12, c: ["千葉市","銚子市","市川市","船橋市","館山市","木更津市","松戸市","野田市","茂原市","成田市","佐倉市","東金市","習志野市","柏市","市原市","流山市","八千代市","浦安市"] },
+  { p: "東京都", lat: 35.68, lng: 139.69, c: ["千代田区","中央区","港区","新宿区","文京区","台東区","墨田区","江東区","品川区","目黒区","大田区","世田谷区","渋谷区","中野区","杉並区","豊島区","北区","荒川区","板橋区","練馬区","足立区","葛飾区","江戸川区","八王子市","立川市","武蔵野市","三鷹市","青梅市","府中市","調布市","町田市","国分寺市","多摩市"] },
+  { p: "神奈川県", lat: 35.44, lng: 139.64, c: ["横浜市","川崎市","相模原市","横須賀市","平塚市","鎌倉市","藤沢市","小田原市","茅ヶ崎市","逗子市","三浦市","秦野市","厚木市","大和市","伊勢原市","海老名市"] },
+  { p: "新潟県", lat: 37.90, lng: 139.02, c: ["新潟市","長岡市","三条市","柏崎市","新発田市","小千谷市","十日町市","見附市","村上市","燕市","糸魚川市","妙高市","五泉市","上越市","佐渡市","南魚沼市"] },
+  { p: "富山県", lat: 36.69, lng: 137.21, c: ["富山市","高岡市","魚津市","氷見市","滑川市","黒部市","砺波市","小矢部市","南砺市","射水市"] },
+  { p: "石川県", lat: 36.59, lng: 136.62, c: ["金沢市","七尾市","小松市","輪島市","珠洲市","加賀市","羽咋市","かほく市","白山市","能美市"] },
+  { p: "福井県", lat: 36.06, lng: 136.22, c: ["福井市","敦賀市","小浜市","大野市","勝山市","鯖江市","あわら市","越前市","坂井市"] },
+  { p: "山梨県", lat: 35.66, lng: 138.56, c: ["甲府市","富士吉田市","都留市","山梨市","大月市","韮崎市","南アルプス市","北杜市","甲斐市","笛吹市"] },
+  { p: "長野県", lat: 36.65, lng: 138.18, c: ["長野市","松本市","上田市","岡谷市","飯田市","諏訪市","須坂市","小諸市","伊那市","駒ヶ根市","中野市","大町市","飯山市","茅野市","塩尻市","佐久市","千曲市","安曇野市"] },
+  { p: "岐阜県", lat: 35.39, lng: 136.72, c: ["岐阜市","大垣市","高山市","多治見市","関市","中津川市","美濃市","瑞浪市","羽島市","恵那市","美濃加茂市","土岐市","各務原市","可児市","飛騨市","郡上市","下呂市"] },
+  { p: "静岡県", lat: 34.97, lng: 138.38, c: ["静岡市","浜松市","沼津市","熱海市","三島市","富士宮市","伊東市","島田市","富士市","磐田市","焼津市","掛川市","藤枝市","御殿場市","袋井市","下田市","裾野市","湖西市","伊豆市"] },
+  { p: "愛知県", lat: 35.18, lng: 136.90, c: ["名古屋市","豊橋市","岡崎市","一宮市","瀬戸市","半田市","春日井市","豊川市","津島市","碧南市","刈谷市","豊田市","安城市","西尾市","蒲郡市","犬山市","常滑市","江南市","小牧市","稲沢市","新城市","東海市","大府市","知多市","知立市","尾張旭市","高浜市","岩倉市","豊明市","日進市","田原市","愛西市","清須市","北名古屋市","弥富市","みよし市","あま市","長久手市"] },
+  { p: "三重県", lat: 34.73, lng: 136.50, c: ["津市","四日市市","伊勢市","松阪市","桑名市","鈴鹿市","名張市","尾鷲市","亀山市","鳥羽市","熊野市","いなべ市","志摩市","伊賀市"] },
+  { p: "滋賀県", lat: 35.00, lng: 135.86, c: ["大津市","彦根市","長浜市","近江八幡市","草津市","守山市","栗東市","甲賀市","野洲市","湖南市","高島市","東近江市","米原市"] },
+  { p: "京都府", lat: 35.02, lng: 135.75, c: ["京都市","福知山市","舞鶴市","綾部市","宇治市","宮津市","亀岡市","城陽市","向日市","長岡京市","八幡市","京田辺市","京丹後市","南丹市","木津川市"] },
+  { p: "大阪府", lat: 34.68, lng: 135.52, c: ["大阪市","堺市","岸和田市","豊中市","池田市","吹田市","泉大津市","高槻市","貝塚市","守口市","枚方市","茨木市","八尾市","泉佐野市","富田林市","寝屋川市","河内長野市","松原市","大東市","和泉市","箕面市","柏原市","羽曳野市","門真市","摂津市","東大阪市"] },
+  { p: "兵庫県", lat: 34.69, lng: 135.18, c: ["神戸市","姫路市","尼崎市","明石市","西宮市","洲本市","芦屋市","伊丹市","相生市","豊岡市","加古川市","赤穂市","西脇市","宝塚市","三木市","高砂市","川西市","三田市","丹波篠山市","淡路市"] },
+  { p: "奈良県", lat: 34.68, lng: 135.83, c: ["奈良市","大和高田市","大和郡山市","天理市","橿原市","桜井市","五條市","御所市","生駒市","香芝市","葛城市","宇陀市"] },
+  { p: "和歌山県", lat: 34.22, lng: 135.16, c: ["和歌山市","海南市","橋本市","有田市","御坊市","田辺市","新宮市","紀の川市","岩出市"] },
+  { p: "鳥取県", lat: 35.50, lng: 134.23, c: ["鳥取市","米子市","倉吉市","境港市"] },
+  { p: "島根県", lat: 35.47, lng: 133.05, c: ["松江市","浜田市","出雲市","益田市","大田市","安来市","江津市","雲南市"] },
+  { p: "岡山県", lat: 34.66, lng: 133.93, c: ["岡山市","倉敷市","津山市","玉野市","笠岡市","井原市","総社市","高梁市","新見市","備前市","瀬戸内市","赤磐市","真庭市","美作市","浅口市"] },
+  { p: "広島県", lat: 34.39, lng: 132.45, c: ["広島市","呉市","竹原市","三原市","尾道市","福山市","府中市","三次市","庄原市","大竹市","東広島市","廿日市市","安芸高田市"] },
+  { p: "山口県", lat: 34.18, lng: 131.47, c: ["下関市","宇部市","山口市","萩市","防府市","下松市","岩国市","光市","長門市","柳井市","美祢市","周南市","山陽小野田市"] },
+  { p: "徳島県", lat: 34.06, lng: 134.55, c: ["徳島市","鳴門市","小松島市","阿南市","吉野川市","阿波市","美馬市","三好市"] },
+  { p: "香川県", lat: 34.34, lng: 134.04, c: ["高松市","丸亀市","坂出市","善通寺市","観音寺市","さぬき市","東かがわ市","三豊市"] },
+  { p: "愛媛県", lat: 33.84, lng: 132.76, c: ["松山市","今治市","宇和島市","八幡浜市","新居浜市","西条市","大洲市","伊予市","四国中央市","西予市","東温市"] },
+  { p: "高知県", lat: 33.55, lng: 133.53, c: ["高知市","室戸市","安芸市","南国市","土佐市","須崎市","宿毛市","土佐清水市","四万十市","香南市","香美市"] },
+  { p: "福岡県", lat: 33.60, lng: 130.41, c: ["北九州市","福岡市","大牟田市","久留米市","直方市","飯塚市","田川市","柳川市","八女市","筑後市","大川市","行橋市","豊前市","中間市","小郡市","筑紫野市","春日市","大野城市","宗像市","太宰府市","糸島市"] },
+  { p: "佐賀県", lat: 33.24, lng: 130.29, c: ["佐賀市","唐津市","鳥栖市","多久市","伊万里市","武雄市","鹿島市","小城市","嬉野市","神埼市"] },
+  { p: "長崎県", lat: 32.74, lng: 129.87, c: ["長崎市","佐世保市","島原市","諫早市","大村市","平戸市","松浦市","対馬市","壱岐市","五島市","西海市","雲仙市","南島原市"] },
+  { p: "熊本県", lat: 32.78, lng: 130.74, c: ["熊本市","八代市","人吉市","荒尾市","水俣市","玉名市","山鹿市","菊池市","宇土市","上天草市","宇城市","阿蘇市","天草市","合志市"] },
+  { p: "大分県", lat: 33.23, lng: 131.61, c: ["大分市","別府市","中津市","日田市","佐伯市","臼杵市","津久見市","竹田市","豊後高田市","杵築市","宇佐市","豊後大野市","由布市","国東市"] },
+  { p: "宮崎県", lat: 31.91, lng: 131.42, c: ["宮崎市","都城市","延岡市","日南市","小林市","日向市","串間市","西都市","えびの市"] },
+  { p: "鹿児島県", lat: 31.56, lng: 130.55, c: ["鹿児島市","鹿屋市","枕崎市","阿久根市","出水市","指宿市","西之表市","垂水市","薩摩川内市","日置市","曽於市","霧島市","いちき串木野市","南さつま市","志布志市","奄美市"] },
+  { p: "沖縄県", lat: 26.21, lng: 127.68, c: ["那覇市","宜野湾市","石垣市","浦添市","名護市","糸満市","沖縄市","豊見城市","うるま市","宮古島市","南城市"] }
+];
+
+// ============================================================================
+// 2. ゲームステート管理
+// ============================================================================
+let cities = [];
+let clans = {}; // clanId -> { id, name, color, gold, food, tech, allies: {clanId: turns}, isPlayer }
+let playerClanId = null;
+let selectedCityId = null;
+let currentTab = 'domestic';
+let turnCount = 1;
+let battleContext = null;
+
+// マップカメラ制御
+let cam = { x: 0, y: 0, zoom: 1, dragging: false, lastX: 0, lastY: 0 };
+
+// 初期データの展開
+function initDefaultCities() {
+  cities = [];
+  let idCounter = 0;
+  PREF_DATA.forEach(pref => {
+    const count = pref.c.length;
+    pref.c.forEach((cityName, idx) => {
+      // 同一県内で重ならないよう渦巻き状にオフセット配置
+      const angle = idx * 2.4;
+      const radius = 0.08 * Math.sqrt(idx + 1);
+      const lat = pref.lat + Math.sin(angle) * radius;
+      const lng = pref.lng + Math.cos(angle) * radius * 1.2;
+      addCityNode(idCounter++, pref.p, cityName, lat, lng);
+    });
+  });
+}
+
+function addCityNode(id, pref, name, lat, lng) {
+  // 政令市・主要都市判定で初期国力に個性を出す
+  const isMajor = /札幌|仙台|さいたま|千葉|新宿|千代田|横浜|川崎|新潟|静岡|浜松|名古屋|岡崎|豊田|京都|大阪|堺|神戸|岡山|広島|福岡|北九州|熊本|那覇/.test(name);
+  const basePower = isMajor ? 1.5 : (name.endsWith("市") || name.endsWith("区") ? 1.0 : 0.75);
+  cities.push({
+    id, pref, name, lat, lng,
+    x: (lng - 127) * 90,
+    y: (46 - lat) * 90,
+    owner: id, // 初期は各市区町村が独立勢力
+    troops: Math.round((800 + Math.floor(Math.random() * 400)) * basePower),
+    def: Math.round(50 * basePower),
+    eco: Math.round(60 * basePower),
+    agri: Math.round(60 * basePower),
+    neighbors: [],
+    acted: false
+  });
+}
+
+// ============================================================================
+// 3. スタート画面 UI & HeartRails Geo API による全1,741市区町村取得
+// ============================================================================
+const prefFilter = document.getElementById('pref-filter');
+const citySearch = document.getElementById('city-search');
+const cityGrid = document.getElementById('city-grid');
+const startBtn = document.getElementById('btn-start-game');
+let startSelectedCityId = null;
+
+function setupStartScreen() {
+  PREF_DATA.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.p;
+    opt.textContent = p.p;
+    prefFilter.appendChild(opt);
+  });
+  initDefaultCities();
+  // デフォルトで岡崎市があれば初期選択状態にしておく
+  const defaultCity = cities.find(c => c.name === "岡崎市") || cities[0];
+  if (defaultCity) selectStartCity(defaultCity.id);
+  renderStartCityGrid();
+}
+
+function renderStartCityGrid() {
+  const pf = prefFilter.value;
+  const kw = citySearch.value.trim();
+  cityGrid.innerHTML = '';
+  document.getElementById('city-count-label').textContent = cities.length;
+
+  const filtered = cities.filter(c => {
+    if (pf !== 'ALL' && c.pref !== pf) return false;
+    if (kw && !c.name.includes(kw) && !c.pref.includes(kw)) return false;
+    return true;
+  });
+
+  filtered.slice(0, 500).forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'city-card' + (c.id === startSelectedCityId ? ' selected' : '');
+    card.innerHTML = `
+      <div class="pref-tag">${c.pref}</div>
+      <div class="city-name">${c.name}</div>
+      <div class="city-power">⚔️${c.troops} / 💰${c.eco}</div>
+    `;
+    card.onclick = () => selectStartCity(c.id);
+    cityGrid.appendChild(card);
+  });
+}
+
+function selectStartCity(id) {
+  startSelectedCityId = id;
+  const c = cities.find(x => x.id === id);
+  if (c) {
+    document.getElementById('selected-start-label').textContent = `${c.pref} ${c.name}`;
+    startBtn.disabled = false;
+  }
+  renderStartCityGrid();
+}
+
+prefFilter.onchange = renderStartCityGrid;
+citySearch.oninput = renderStartCityGrid;
+
+document.getElementById('btn-random-city').onclick = () => {
+  const rand = cities[Math.floor(Math.random() * cities.length)];
+  prefFilter.value = 'ALL';
+  citySearch.value = rand.name;
+  selectStartCity(rand.id);
+};
+
+document.getElementById('btn-add-custom').onclick = () => {
+  const nameInput = document.getElementById('custom-city-name');
+  const name = nameInput.value.trim();
+  if (!name) return;
+  const pf = prefFilter.value === 'ALL' ? '愛知県' : prefFilter.value;
+  const prefObj = PREF_DATA.find(p => p.p === pf) || PREF_DATA[22];
+  const newId = cities.length;
+  addCityNode(newId, pf, name, prefObj.lat + (Math.random() - 0.5) * 0.3, prefObj.lng + (Math.random() - 0.5) * 0.3);
+  nameInput.value = '';
+  selectStartCity(newId);
+};
+
+// HeartRails Geo API から指定都道府県の全市区町村を取得
+async function fetchPrefCitiesFromAPI(prefName) {
+  const res = await fetch(`https://geoapi.heartrails.com/api/json?method=getCities&prefecture=${encodeURIComponent(prefName)}`);
+  const data = await res.json();
+  return data.response?.location || [];
+}
+
+document.getElementById('btn-load-pref-api').onclick = async () => {
+  const pf = prefFilter.value;
+  if (pf === 'ALL') {
+    alert('都道府県を選択してから押すか、右隣の「全国1,741市区町村フル読込」を押してください。');
+    return;
+  }
+  const statusEl = document.getElementById('api-status');
+  statusEl.textContent = `${pf}の全市町村を取得中...`;
+  try {
+    const locs = await fetchPrefCitiesFromAPI(pf);
+    if (locs.length > 0) {
+      cities = cities.filter(c => c.pref !== pf);
+      locs.forEach((loc, idx) => {
+        addCityNode(cities.length + idx, pf, loc.city, parseFloat(loc.y), parseFloat(loc.x));
+      });
+      // ID振り直し
+      cities.forEach((c, i) => { c.id = i; c.owner = i; });
+      statusEl.textContent = `✅ ${pf}の全${locs.length}市区町村を反映しました！`;
+      renderStartCityGrid();
+    }
+  } catch (e) {
+    statusEl.textContent = `⚠️ API取得失敗（オフライン内蔵データを使用中）`;
+  }
+};
+
+document.getElementById('btn-load-all-api').onclick = async () => {
+  const statusEl = document.getElementById('api-status');
+  const btn = document.getElementById('btn-load-all-api');
+  btn.disabled = true;
+  let loadedCities = [];
+  try {
+    for (let i = 0; i < PREF_DATA.length; i++) {
+      const pf = PREF_DATA[i].p;
+      statusEl.textContent = `全国データ取得中... (${i + 1}/47: ${pf})`;
+      const locs = await fetchPrefCitiesFromAPI(pf);
+      locs.forEach(loc => {
+        loadedCities.push({ pref: pf, name: loc.city, lat: parseFloat(loc.y), lng: parseFloat(loc.x) });
+      });
+    }
+    if (loadedCities.length > 500) {
+      cities = [];
+      loadedCities.forEach((c, idx) => addCityNode(idx, c.pref, c.name, c.lat, c.lng));
+      statusEl.textContent = `✅ 全国 ${cities.length} 市区町村のフルデータを展開完了！`;
+      selectStartCity(cities[0].id);
+    }
+  } catch (e) {
+    statusEl.textContent = `⚠️ 通信エラーのため内蔵データを使用します`;
+    btn.disabled = false;
+  }
+};
+
+// ============================================================================
+// 4. ゲーム開始＆隣接グラフ構築（ドロネー風近傍リンク）
+// ============================================================================
+startBtn.onclick = () => {
+  if (startSelectedCityId === null) return;
+  document.getElementById('start-screen').style.display = 'none';
+  buildCityGraph();
+  initClans(startSelectedCityId);
+  selectedCityId = startSelectedCityId;
+  centerCameraOnCity(cities[selectedCityId]);
+  updateTopbar();
+  updateSidebar();
+  addLog(`🚩 【天下統一開始】${cities[selectedCityId].pref}${cities[selectedCityId].name}より旗揚げしました！`, 'log-event');
+  requestAnimationFrame(drawMap);
+};
+
+function buildCityGraph() {
+  // 各都市から距離が近い上位3〜5都市を双方向リンクとして接続し、孤立を防ぐ
+  cities.forEach(c => c.neighbors = []);
+  for (let i = 0; i < cities.length; i++) {
+    const a = cities[i];
+    const dists = [];
+    for (let j = 0; j < cities.length; j++) {
+      if (i === j) continue;
+      const b = cities[j];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      dists.push({ id: b.id, d });
+    }
+    dists.sort((p, q) => p.d - q.d);
+    const connectCount = cities.length > 800 ? 4 : 3;
+    for (let k = 0; k < Math.min(connectCount, dists.length); k++) {
+      const targetId = dists[k].id;
+      if (!a.neighbors.includes(targetId)) a.neighbors.push(targetId);
+      if (!cities[targetId].neighbors.includes(a.id)) cities[targetId].neighbors.push(a.id);
+    }
+  }
+}
+
+function initClans(playerStartId) {
+  clans = {};
+  playerClanId = playerStartId;
+  cities.forEach(c => {
+    const isP = (c.id === playerStartId);
+    const hue = (c.id * 137) % 360;
+    clans[c.id] = {
+      id: c.id,
+      name: `${c.name}勢`,
+      color: isP ? '#3b82f6' : `hsl(${hue}, 65%, 52%)`,
+      gold: isP ? 600 : 400,
+      food: isP ? 800 : 600,
+      tech: 1,
+      allies: {},
+      isPlayer: isP
+    };
+  });
+}
+
+// ============================================================================
+// 5. マップ描画＆マウス操作
+// ============================================================================
+const canvas = document.getElementById('map-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  canvas.width = canvas.parentElement.clientWidth;
+  canvas.height = canvas.parentElement.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function centerCameraOnCity(c) {
+  cam.zoom = cities.length > 800 ? 3.2 : 2.2;
+  cam.x = canvas.width / 2 - c.x * cam.zoom;
+  cam.y = canvas.height / 2 - c.y * cam.zoom;
+}
+
+canvas.addEventListener('mousedown', e => {
+  cam.dragging = true;
+  cam.lastX = e.clientX;
+  cam.lastY = e.clientY;
+});
+window.addEventListener('mouseup', () => cam.dragging = false);
+window.addEventListener('mousemove', e => {
+  if (!cam.dragging) return;
+  cam.x += e.clientX - cam.lastX;
+  cam.y += e.clientY - cam.lastY;
+  cam.lastX = e.clientX;
+  cam.lastY = e.clientY;
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.15 : 0.87;
+  const mx = e.offsetX, my = e.offsetY;
+  cam.x = mx - (mx - cam.x) * factor;
+  cam.y = my - (my - cam.y) * factor;
+  cam.zoom = Math.max(0.4, Math.min(12, cam.zoom * factor));
+});
+
+canvas.addEventListener('click', e => {
+  const mx = (e.offsetX - cam.x) / cam.zoom;
+  const my = (e.offsetY - cam.y) / cam.zoom;
+  let closest = null;
+  let minDist = 14 / cam.zoom;
+  for (const c of cities) {
+    const d = Math.hypot(c.x - mx, c.y - my);
+    if (d < minDist) { minDist = d; closest = c; }
+  }
+  if (closest) {
+    selectedCityId = closest.id;
+    updateSidebar();
+  }
+});
+
+document.getElementById('btn-zoom-in').onclick = () => cam.zoom = Math.min(12, cam.zoom * 1.3);
+document.getElementById('btn-zoom-out').onclick = () => cam.zoom = Math.max(0.4, cam.zoom * 0.75);
+document.getElementById('btn-center-player').onclick = () => {
+  const myCity = cities.find(c => c.owner === playerClanId) || cities[0];
+  centerCameraOnCity(myCity);
+};
+
+function drawMap() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(cam.x, cam.y);
+  ctx.scale(cam.zoom, cam.zoom);
+
+  const selCity = cities[selectedCityId];
+  const pClan = clans[playerClanId];
+
+  // 街道（接続線）の描画
+  ctx.lineWidth = 0.8 / cam.zoom;
+  for (const c of cities) {
+    for (const nid of c.neighbors) {
+      if (nid < c.id) continue;
+      const nb = cities[nid];
+      const isHighlight = selCity && (selCity.id === c.id || selCity.id === nb.id);
+      ctx.strokeStyle = isHighlight ? 'rgba(251, 191, 36, 0.75)' : 'rgba(148, 163, 184, 0.22)';
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(nb.x, nb.y);
+      ctx.stroke();
+    }
+  }
+
+  // 都市ノードの描画
+  const nodeRadius = Math.max(2.2, 5.5 / Math.sqrt(cam.zoom));
+  for (const c of cities) {
+    const isPlayer = c.owner === playerClanId;
+    const isAlly = pClan && pClan.allies[c.owner] > 0;
+    const isSelected = selCity && selCity.id === c.id;
+    const isNeighborOfSelected = selCity && selCity.neighbors.includes(c.id);
+
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, isSelected ? nodeRadius * 1.45 : nodeRadius, 0, Math.PI * 2);
+    if (isPlayer) ctx.fillStyle = '#3b82f6';
+    else if (isAlly) ctx.fillStyle = '#10b981';
+    else ctx.fillStyle = clans[c.owner]?.color || '#ef4444';
+    ctx.fill();
+
+    if (isSelected || isNeighborOfSelected) {
+      ctx.lineWidth = (isSelected ? 2.5 : 1.5) / cam.zoom;
+      ctx.strokeStyle = isSelected ? '#fbbf24' : '#ffffff';
+      ctx.stroke();
+    }
+
+    // ズーム時または主要選択都市のラベル描画
+    if (cam.zoom > 1.8 || isSelected || isPlayer) {
+      ctx.fillStyle = isSelected ? '#fbbf24' : '#f8fafc';
+      ctx.font = `${Math.max(8, 11 / Math.sqrt(cam.zoom))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(c.name, c.x, c.y - nodeRadius - (3 / cam.zoom));
+      if (cam.zoom > 2.6 || isSelected) {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = `${Math.max(7, 9 / Math.sqrt(cam.zoom))}px sans-serif`;
+        ctx.fillText(`⚔${c.troops}`, c.x, c.y + nodeRadius + (9 / cam.zoom));
+      }
+    }
+  }
+
+  ctx.restore();
+  requestAnimationFrame(drawMap);
+}
+
+// ============================================================================
+// 6. UI更新＆コマンド（内政・合戦・外交）
+// ============================================================================
+const SEASONS = ['春', '夏', '秋', '冬'];
+
+function updateTopbar() {
+  const p = clans[playerClanId];
+  const myCities = cities.filter(c => c.owner === playerClanId);
+  const year = Math.floor((turnCount - 1) / 4) + 1;
+  const season = SEASONS[(turnCount - 1) % 4];
+
+  document.getElementById('date-label').textContent = `${year}年目 ${season}`;
+  document.getElementById('player-clan-name').textContent = p.name;
+  document.getElementById('gold-val').textContent = p.gold.toLocaleString();
+  document.getElementById('food-val').textContent = p.food.toLocaleString();
+  document.getElementById('tech-val').textContent = p.tech;
+  document.getElementById('territory-val').textContent = `${myCities.length} / ${cities.length}`;
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTab = btn.dataset.tab;
+    updateSidebar();
+  };
+});
+
+function updateSidebar() {
+  const c = cities[selectedCityId];
+  if (!c) return;
+  const ownerClan = clans[c.owner];
+  const pClan = clans[playerClanId];
+  const isMine = c.owner === playerClanId;
+  const allyTurns = pClan.allies[c.owner] || 0;
+
+  document.getElementById('detail-pref').textContent = c.pref;
+  document.getElementById('detail-name').textContent = c.name;
+  document.getElementById('detail-owner').textContent = ownerClan.name;
+  document.getElementById('detail-owner').style.background = isMine ? '#2563eb' : (allyTurns > 0 ? '#059669' : '#dc2626');
+  document.getElementById('detail-relation').textContent = isMine ? '自軍領土' : (allyTurns > 0 ? `同盟中 (残り${allyTurns}T)` : '敵対勢力');
+
+  document.getElementById('detail-troops').textContent = c.troops.toLocaleString();
+  document.getElementById('detail-def').textContent = c.def;
+  document.getElementById('detail-eco').textContent = c.eco;
+  document.getElementById('detail-agri').textContent = c.agri;
+
+  const container = document.getElementById('actions-container');
+  container.innerHTML = '';
+
+  if (currentTab === 'domestic') {
+    if (!isMine) {
+      container.innerHTML = `<div style="color:var(--text-sub); font-size:0.85rem;">※自軍の支配都市を選択すると内政・徴兵が行えます。敵都市へは「合戦・侵攻」または「外交・調略」タブを選択してください。</div>`;
+      return;
+    }
+    addCmdButton(container, '💰 商業投資', '都市の商業値を+15高め、毎ターンの金収入を増やす', '金100', pClan.gold >= 100, () => {
+      pClan.gold -= 100; c.eco += 15;
+      addLog(`📈 ${c.name}で商業投資を実施（商業値: ${c.eco}）`);
+      updateTopbar(); updateSidebar();
+    });
+    addCmdButton(container, '🌾 農業開拓', '都市の農業値を+15高め、収穫期の兵糧収入を増やす', '金100', pClan.gold >= 100, () => {
+      pClan.gold -= 100; c.agri += 15;
+      addLog(`🌾 ${c.name}で農業開拓を実施（農業値: ${c.agri}）`);
+      updateTopbar(); updateSidebar();
+    });
+    addCmdButton(container, '⚔️ 徴兵・訓練', `${c.name}の兵力を+350増強する`, '金120 / 糧120', pClan.gold >= 120 && pClan.food >= 120, () => {
+      pClan.gold -= 120; pClan.food -= 120; c.troops += 350;
+      addLog(`⚔️ ${c.name}で350名を徴兵しました（兵力: ${c.troops}）`);
+      updateTopbar(); updateSidebar();
+    });
+    addCmdButton(container, '🏯 城郭改修', '城の防御度を+20強化し、防衛時の被害を減らす', '金150', pClan.gold >= 150, () => {
+      pClan.gold -= 150; c.def += 20;
+      addLog(`🏯 ${c.name}の城郭を強化しました（防御: ${c.def}）`);
+      updateTopbar(); updateSidebar();
+    });
+    const techCost = pClan.tech * 300;
+    addCmdButton(container, '⚙️ 技術開発', '勢力全体の技術Lvを+1上げ、全軍の戦闘力を底上げする', `金${techCost}`, pClan.gold >= techCost, () => {
+      pClan.gold -= techCost; pClan.tech += 1;
+      addLog(`💡 技術革新！${pClan.name}の技術Lvが ${pClan.tech} に上昇！`, 'log-event');
+      updateTopbar(); updateSidebar();
+    });
+  } else if (currentTab === 'war') {
+    if (isMine) {
+      // 選択中の自軍都市から隣接する敵都市への出陣リスト
+      const enemyNeighbors = c.neighbors.map(id => cities[id]).filter(nb => nb.owner !== playerClanId && !(pClan.allies[nb.owner] > 0));
+      if (enemyNeighbors.length === 0) {
+        container.innerHTML = `<div style="color:var(--text-sub); font-size:0.85rem;">この都市に隣接する敵都市はありません。前線の都市を選択してください。</div>`;
+      } else {
+        enemyNeighbors.forEach(target => {
+          addCmdButton(container, `⚔️ ${target.name} へ出陣`, `敵兵力: ${target.troops} / 城防: ${target.def}`, '糧100', pClan.food >= 100 && c.troops >= 200, () => {
+            openBattleModal(c, target);
+          });
+        });
+      }
+    } else {
+      // 選択中の敵都市へ、隣接する自軍都市から攻め込むリスト
+      const myNeighbors = c.neighbors.map(id => cities[id]).filter(nb => nb.owner === playerClanId);
+      if (allyTurns > 0) {
+        container.innerHTML = `<div style="color:#34d399; font-size:0.85rem;">同盟中の勢力です。攻撃するには外交タブから同盟を破棄してください。</div>`;
+      } else if (myNeighbors.length === 0) {
+        container.innerHTML = `<div style="color:var(--text-sub); font-size:0.85rem;">${c.name}に隣接する自軍都市がありません。まずは周辺の都市から攻略してください。</div>`;
+      } else {
+        myNeighbors.forEach(fromCity => {
+          addCmdButton(container, `🚩 ${fromCity.name} から侵攻`, `自軍兵力: ${fromCity.troops} → ${c.name}(兵${c.troops})`, '糧100', pClan.food >= 100 && fromCity.troops >= 200, () => {
+            openBattleModal(fromCity, c);
+          });
+        });
+      }
+    }
+  } else if (currentTab === 'diplomacy') {
+    if (isMine) {
+      container.innerHTML = `<div style="color:var(--text-sub); font-size:0.85rem;">マップ上の他勢力の都市をクリックすると、その勢力との同盟・調略・降伏勧告を行えます。</div>`;
+      return;
+    }
+    if (allyTurns === 0) {
+      addCmdButton(container, '🤝 同盟締結', `${ownerClan.name}と8ターンの同盟を結ぶ（共通の敵への合戦時に援軍参加）`, '金250', pClan.gold >= 250, () => {
+        pClan.gold -= 250;
+        pClan.allies[c.owner] = 8;
+        ownerClan.allies[playerClanId] = 8;
+        addLog(`🤝 ${ownerClan.name}と同盟を締結しました！（8ターン有効）`, 'log-ally');
+        updateTopbar(); updateSidebar();
+      });
+    } else {
+      addCmdButton(container, '💔 同盟破棄', `${ownerClan.name}との同盟を破棄して交戦可能にする`, '金0', true, () => {
+        delete pClan.allies[c.owner];
+        delete ownerClan.allies[playerClanId];
+        addLog(`⚠️ ${ownerClan.name}との同盟を破棄しました。`, 'log-war');
+        updateSidebar();
+      });
+    }
+
+    addCmdButton(container, '🥷 調略・流言工作', `${c.name}に工作員を放ち、敵兵力と城防御を削る`, '金180', pClan.gold >= 180, () => {
+      pClan.gold -= 180;
+      const dmgTroops = Math.round(c.troops * 0.22);
+      const dmgDef = Math.min(c.def, 18);
+      c.troops = Math.max(100, c.troops - dmgTroops);
+      c.def = Math.max(10, c.def - dmgDef);
+      addLog(`🥷 調略成功！${c.name}の兵力を-${dmgTroops}、城防御を-${dmgDef}低下させました！`, 'log-event');
+      updateTopbar(); updateSidebar();
+    });
+
+    const myTotalTroops = cities.filter(x => x.owner === playerClanId).reduce((s, x) => s + x.troops, 0);
+    const enemyTotalTroops = cities.filter(x => x.owner === c.owner).reduce((s, x) => s + x.troops, 0);
+    const canSurrender = myTotalTroops > enemyTotalTroops * 4.5;
+    addCmdButton(container, '📜 降伏勧告', `圧倒的な兵力差（4.5倍以上）を示し、戦わずに${ownerClan.name}の全都市を併合する`, '金300', pClan.gold >= 300 && canSurrender, () => {
+      pClan.gold -= 300;
+      const targetOwner = c.owner;
+      let count = 0;
+      cities.forEach(city => {
+        if (city.owner === targetOwner) { city.owner = playerClanId; count++; }
+      });
+      addLog(`👑 ${ownerClan.name}が我が軍の威光に服し、無血開城しました！（+${count}都市）`, 'log-ally');
+      checkVictory();
+      updateTopbar(); updateSidebar();
+    });
+  }
+}
+
+function addCmdButton(parent, name, desc, cost, enabled, onClick) {
+  const btn = document.createElement('button');
+  btn.className = 'cmd-btn';
+  btn.disabled = !enabled;
+  btn.innerHTML = `
+    <div class="cmd-info">
+      <span class="cmd-name">${name}</span>
+      <span class="cmd-desc">${desc}</span>
+    </div>
+    <span class="cmd-cost">${cost}</span>
+  `;
+  btn.onclick = onClick;
+  parent.appendChild(btn);
+}
+
+// ============================================================================
+// 7. 合戦モーダルと戦闘計算
+// ============================================================================
+const sendRatioInput = document.getElementById('send-ratio');
+sendRatioInput.oninput = () => {
+  document.getElementById('send-ratio-label').textContent = `${sendRatioInput.value}%`;
+  if (battleContext) updateBattlePreview();
+};
+
+function openBattleModal(fromCity, toCity) {
+  // 攻撃対象の敵都市に隣接している同盟軍都市があれば援軍ボーナスを計算
+  const pClan = clans[playerClanId];
+  let allySupport = 0;
+  toCity.neighbors.forEach(nid => {
+    const nb = cities[nid];
+    if (pClan.allies[nb.owner] > 0) {
+      allySupport += Math.round(nb.troops * 0.35);
+    }
+  });
+
+  battleContext = { fromCity, toCity, allySupport };
+  document.getElementById('battle-modal').style.display = 'flex';
+  updateBattlePreview();
+}
+
+function updateBattlePreview() {
+  const { fromCity, toCity, allySupport } = battleContext;
+  const ratio = parseInt(sendRatioInput.value, 10) / 100;
+  const sendTroops = Math.floor(fromCity.troops * ratio);
+
+  document.getElementById('battle-route-text').textContent = `${fromCity.name} から ${toCity.name}（${clans[toCity.owner].name}）へ侵攻`;
+  document.getElementById('atk-name').textContent = `${fromCity.name}派遣軍`;
+  document.getElementById('atk-troops').textContent = `⚔️ ${(sendTroops + allySupport).toLocaleString()}`;
+  document.getElementById('atk-ally-bonus').textContent = allySupport > 0 ? `(🤝 同盟援軍 +${allySupport} 参戦！)` : '';
+  document.getElementById('def-name').textContent = `${toCity.name}守備軍`;
+  document.getElementById('def-troops').textContent = `⚔️ ${toCity.troops.toLocaleString()}`;
+  document.getElementById('def-castle-bonus').textContent = `🏯 城防御: ${toCity.def}`;
+}
+
+function closeBattleModal() {
+  document.getElementById('battle-modal').style.display = 'none';
+  battleContext = null;
+}
+
+function executeBattle(tactic) {
+  if (!battleContext) return;
+  const { fromCity, toCity, allySupport } = battleContext;
+  const pClan = clans[playerClanId];
+  const eClan = clans[toCity.owner];
+  pClan.food -= 100;
+
+  const ratio = parseInt(sendRatioInput.value, 10) / 100;
+  const sendTroops = Math.floor(fromCity.troops * ratio);
+  fromCity.troops -= sendTroops;
+
+  // 戦術補正とAIの迎撃戦術
+  let atkMult = 1 + (pClan.tech - 1) * 0.12;
+  let defMult = 1 + (eClan.tech - 1) * 0.12 + (toCity.def / 200);
+
+  if (tactic === 'charge') {
+    atkMult *= 1.25;
+  } else if (tactic === 'siege') {
+    atkMult *= 1.08;
+    defMult *= 0.9;
+  } else if (tactic === 'ambush') {
+    // 奇襲は城防御を無視し、ランダムでクリティカル
+    defMult = 1 + (eClan.tech - 1) * 0.1;
+    atkMult *= (Math.random() < 0.65 ? 1.45 : 0.85);
+  }
+
+  const totalAtkPower = (sendTroops + allySupport) * atkMult;
+  const totalDefPower = toCity.troops * defMult;
+
+  closeBattleModal();
+
+  if (totalAtkPower > totalDefPower) {
+    // 攻撃側勝利
+    const surviveRatio = Math.max(0.25, 1 - (totalDefPower / totalAtkPower) * 0.75);
+    const survivors = Math.max(100, Math.round(sendTroops * surviveRatio));
+    toCity.owner = playerClanId;
+    toCity.troops = survivors;
+    toCity.def = Math.max(20, toCity.def - 10);
+    selectedCityId = toCity.id;
+    addLog(`🔥 【戦勝】${fromCity.name}軍が${toCity.name}を攻略し、支配下に置きました！`, 'log-war');
+    checkVictory();
+  } else {
+    // 防衛側勝利
+    const remainDef = Math.max(100, Math.round(toCity.troops * (1 - (totalAtkPower / totalDefPower) * 0.7)));
+    toCity.troops = remainDef;
+    const retreat = Math.round(sendTroops * 0.2);
+    fromCity.troops += retreat;
+    addLog(`💥 【敗退】${toCity.name}の堅守に阻まれ、攻撃軍は撤退しました（敵残存: ${remainDef}）`, 'log-war');
+  }
+
+  updateTopbar();
+  updateSidebar();
+}
+
+// ============================================================================
+// 8. 便利コマンド（一括内政・後方からの前線兵力招集）
+// ============================================================================
+document.getElementById('btn-auto-domestic').onclick = () => {
+  const p = clans[playerClanId];
+  const myCities = cities.filter(c => c.owner === playerClanId);
+  let count = 0;
+  for (const c of myCities) {
+    if (p.gold >= 100) {
+      p.gold -= 100;
+      if (c.eco <= c.agri) c.eco += 15; else c.agri += 15;
+      count++;
+    } else break;
+  }
+  if (count > 0) {
+    addLog(`⚡ 一括内政により ${count} 都市の商業・農業を開発しました。`);
+    updateTopbar(); updateSidebar();
+  } else {
+    addLog(`⚠️ 一括内政に必要な金（1都市あたり100）が不足しています。`);
+  }
+};
+
+document.getElementById('btn-gather-troops').onclick = () => {
+  const target = cities[selectedCityId];
+  if (!target || target.owner !== playerClanId) {
+    alert('兵力を集めたい「自軍の都市」を選択してから押してください。');
+    return;
+  }
+  let gathered = 0;
+  cities.forEach(c => {
+    if (c.owner === playerClanId && c.id !== target.id) {
+      // 敵と隣接していない後方都市、または兵力が多い都市から半分を送る
+      const hasEnemyNeighbor = c.neighbors.some(nid => cities[nid].owner !== playerClanId);
+      if (!hasEnemyNeighbor && c.troops > 300) {
+        const move = c.troops - 200;
+        c.troops = 200;
+        gathered += move;
+      }
+    }
+  });
+  if (gathered > 0) {
+    target.troops += gathered;
+    addLog(`🚩 後方都市から ${target.name} へ兵力 +${gathered.toLocaleString()} を集結させました！`, 'log-ally');
+    updateSidebar();
+  } else {
+    addLog(`ℹ️ 後方の安全な自軍都市に余剰兵力がありませんでした。`);
+  }
+};
+
+// ============================================================================
+// 9. ターン進行・季節収入・AI思考・ランダムイベント
+// ============================================================================
+document.getElementById('btn-end-turn').onclick = () => {
+  turnCount++;
+  const seasonIdx = (turnCount - 1) % 4;
+
+  // 1. 各勢力の収入計算と同盟ターン経過
+  Object.values(clans).forEach(clan => {
+    for (const allyId in clan.allies) {
+      clan.allies[allyId]--;
+      if (clan.allies[allyId] <= 0) delete clan.allies[allyId];
+    }
+  });
+
+  cities.forEach(c => {
+    const clan = clans[c.owner];
+    if (!clan) return;
+    clan.gold += Math.round(c.eco * 0.9);
+    // 秋は収穫期ボーナスで兵糧2倍
+    const foodMult = (seasonIdx === 2) ? 1.8 : 0.8;
+    clan.food += Math.round(c.agri * foodMult);
+    // 自然増兵
+    c.troops += Math.round(45 + c.agri * 0.4);
+  });
+
+  // 2. AI勢力の行動（内政＆合戦）
+  let aiWarLogs = 0;
+  cities.forEach(c => {
+    if (c.owner === playerClanId) return;
+    const aiClan = clans[c.owner];
+    if (!aiClan) return;
+
+    // AI内政
+    if (aiClan.gold >= 150 && Math.random() < 0.4) {
+      aiClan.gold -= 120;
+      c.troops += 220;
+      c.eco += 5;
+    }
+
+    // AI侵攻判定
+    if (c.troops > 900 && Math.random() < 0.18) {
+      const targets = c.neighbors.map(id => cities[id]).filter(nb => nb.owner !== c.owner && !(aiClan.allies[nb.owner] > 0));
+      if (targets.length > 0) {
+        const target = targets[Math.floor(Math.random() * targets.length)];
+        if (c.troops > target.troops * 1.25) {
+          const send = Math.floor(c.troops * 0.7);
+          c.troops -= send;
+          if (send > target.troops * (1 + target.def / 250)) {
+            const oldOwner = target.owner;
+            target.owner = c.owner;
+            target.troops = Math.max(200, send - Math.floor(target.troops * 0.6));
+            if (oldOwner === playerClanId) {
+              addLog(`🚨 【急報】我が軍の${target.name}が${aiClan.name}に奪われました！`, 'log-war');
+            } else if (aiWarLogs < 2) {
+              addLog(`⚔️ ${aiClan.name}が${target.name}を制圧しました。`);
+              aiWarLogs++;
+            }
+          } else {
+            target.troops = Math.max(150, target.troops - Math.floor(send * 0.5));
+          }
+        }
+      }
+    }
+  });
+
+  // 3. ランダムイベント
+  if (Math.random() < 0.35) {
+    const myCities = cities.filter(c => c.owner === playerClanId);
+    if (myCities.length > 0) {
+      const luckyCity = myCities[Math.floor(Math.random() * myCities.length)];
+      const evType = Math.floor(Math.random() * 3);
+      if (evType === 0) {
+        clans[playerClanId].gold += 300;
+        addLog(`🎉 【特産品ブーム】${luckyCity.name}の特産品が全国で人気を博し、金+300を獲得！`, 'log-event');
+      } else if (evType === 1) {
+        luckyCity.troops += 400;
+        addLog(`🐎 【義勇兵集結】${luckyCity.name}の評判を聞きつけ、義勇兵400名が参陣しました！`, 'log-event');
+      } else {
+        clans[playerClanId].food += 400;
+        addLog(`🌾 【豊作】${luckyCity.name}周辺で記録的な豊作となり、兵糧+400を獲得！`, 'log-event');
+      }
+    }
+  }
+
+  updateTopbar();
+  updateSidebar();
+  checkVictory();
+};
+
+function checkVictory() {
+  const myCount = cities.filter(c => c.owner === playerClanId).length;
+  if (myCount === cities.length) {
+    setTimeout(() => {
+      alert(`🎊 天下統一達成！！ 🎊\n${clans[playerClanId].name}が日本全国の全${cities.length}市区町村を統一しました！\nクリアターン数: ${turnCount}ターン`);
+    }, 100);
+  } else if (myCount === 0) {
+    alert(`💀 全ての支配都市を失いました…ゲームオーバーです。`);
+  }
+}
+
+function addLog(msg, cls = '') {
+  const box = document.getElementById('log-box');
+  const div = document.createElement('div');
+  div.className = `log-entry ${cls}`;
+  div.textContent = `[T${turnCount}] ${msg}`;
+  box.prepend(div);
+}
+
+// 起動実行
+setupStartScreen();
+</script>
+</body>
+</html>
